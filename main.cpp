@@ -2,20 +2,33 @@
 #include <SDL_rect.h>
 #include <SDL_render.h>
 #include <SDL.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <zconf.h>
 
 
 extern "C"
 {
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
+#include "linux/videodev2.h"
+#include "sys/mman.h"
 }
+#define WIDTH 640
+#define HEIGHT 480
 
+int getInt();
 
 int main() {
-    std::cout << "Hello, World!" << std::endl;
 
-    int screen_w = 640, screen_h = 480;
-    const int pixel_w = 640, pixel_h = 480;
+    int count;
+    FILE *myH264;
+    return getInt();
+
+    fseek(myH264,0,SEEK_SET);
+    count = 1;
+    int screen_w = WIDTH, screen_h = HEIGHT;
+    const int pixel_w = WIDTH, pixel_h = HEIGHT;
     SDL_Window *sdlWindow;
     SDL_Renderer *sdlRenderer;
     SDL_Texture *sdlTexture;
@@ -85,8 +98,8 @@ int main() {
     codec_->codec_type = AVMEDIA_TYPE_VIDEO;
     codec_->bit_rate = 0;
     codec_->time_base.den = 30;
-    codec_->width = 640;
-    codec_->height = 480;
+    codec_->width = WIDTH;
+    codec_->height = HEIGHT;
     if(avcodec_open2(codec_, videoCodec, NULL) >= 0)//打开解码器
     {
 
@@ -103,23 +116,18 @@ int main() {
     }
     av_init_packet(&packet);
 
-    FILE *myH264 = fopen("1.H264", "rb");//解码的文件264
-    if(myH264 == NULL)
-    {
-        perror("cant open 264 file\n");
-        return -1;
-    }
+
     int readFileLen = 1;
     unsigned char readBuf[1024*50];
     unsigned char *parseBuf = (unsigned char *)malloc(20*1024*50);
     int  parseBufLen = 0;
-    int count = 1;
+
     while(readFileLen > 0)
     {
         readFileLen = fread(readBuf, 1, sizeof(readBuf), myH264);
         if (readFileLen <=0 )
         {
-            std::cout << "Read file over\n";
+            std::cout << "readFilelen = " << readFileLen << ", Read file over\n";
             break;
         } else
         {
@@ -147,14 +155,13 @@ int main() {
                     if(frameFinished > 0)
                     {
                         printf("count = %d\n", count++);
-      //                  printf("%d %d\n",avpicture_get_size(AV_PIX_FMT_YUYV422, codec_->width,codec_->height), 640*480*2);
-       /*                 uint8_t *YUV = (uint8_t *)malloc(640*480*3);
-                        memcpy(YUV,pFrame_->data[0],640*480);
-                        for (int num = 0; num < 320*480; ++num) {
-                            *(YUV + 2*num + 640*480) = *(pFrame_->data[1]+num);
-                            *(YUV + 2*num + 640*480 + 1) = *(pFrame_->data[1]+num);
-                            *(YUV + 2*num + 640*480*2) = *(pFrame_->data[1]+num);
-                            *(YUV + 2*num + 640*480*2 + 1) = *(pFrame_->data[1]+num);
+       /*                 uint8_t *YUV = (uint8_t *)malloc(WIDTH*HEIGHT*3);
+                        memcpy(YUV,mFrame->data[0],WIDTH*HEIGHT);
+                        for (int num = 0; num < WIDTH*HEIGHT/2; ++num) {
+                            *(YUV + 2*num + WIDTH*HEIGHT) = *(mFrame->data[1]+num);
+                            *(YUV + 2*num + WIDTH*HEIGHT + 1) = *(mFrame->data[1]+num);
+                            *(YUV + 2*num + WIDTH*HEIGHT*2) = *(mFrame->data[1]+num);
+                            *(YUV + 2*num + WIDTH*HEIGHT*2 + 1) = *(mFrame->data[1]+num);
                         }*/
 
                        enum AVPixelFormat FMT = AV_PIX_FMT_NV12;
@@ -174,7 +181,7 @@ int main() {
                         SDL_RenderPresent(sdlRenderer);
 
                         av_free(yuv);
-                        SDL_Delay(50);
+                        SDL_Delay(33);
                 /*        free(YUV);
                         YUV =NULL;*/
 
@@ -194,5 +201,125 @@ int main() {
     av_frame_free(&pFrameYUV);
     fclose(myH264);
 
+    return 0;
+}
+
+int getInt() {
+    void *mem0[32];
+    unsigned int nbufs = 32;
+    struct v4l2_buffer buf0;
+    struct v4l2_capability cap;
+    int dev;
+    int count = 1;
+
+    printf("Open camera\n");
+    // dev = open("/dev/video1", O_RDWR | O_NONBLOCK);
+    dev = open("/dev/video2", O_RDWR );
+    memset(&cap, 0, sizeof cap);
+    ioctl(dev, VIDIOC_QUERYCAP, &cap);
+    printf("Configure Format\n");
+    struct v4l2_format fmt;
+
+    memset(&fmt, 0, sizeof fmt);
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.fmt.pix.width = WIDTH;
+    fmt.fmt.pix.height = HEIGHT;
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_H264;
+    fmt.fmt.pix.field = V4L2_FIELD_ANY;
+
+    ioctl(dev, VIDIOC_S_FMT, &fmt);
+    printf("sizeimage = %d\n",fmt.fmt.pix.sizeimage);
+    ioctl(dev, VIDIOC_G_FMT, &fmt);
+    printf("sizeimage = %d\n",fmt.fmt.pix.sizeimage);
+
+    printf("Configure framerate\n");
+    struct v4l2_streamparm parm;
+
+    memset(&parm, 0, sizeof parm);
+    parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    ioctl(dev, VIDIOC_G_PARM, &parm);
+    printf("   Original: numerator = %d, denominator = %d\n",parm.parm.capture.timeperframe.numerator, parm.parm.capture.timeperframe.denominator);
+    parm.parm.capture.timeperframe.numerator = 1;
+    parm.parm.capture.timeperframe.denominator = 30;
+
+    printf("Expectation: numerator = %d, denominator = %d\n",parm.parm.capture.timeperframe.numerator, parm.parm.capture.timeperframe.denominator);
+
+    ioctl(dev, VIDIOC_S_PARM, &parm);
+    ioctl(dev, VIDIOC_G_PARM, &parm);
+    printf("     Actual: numerator = %d, denominator = %d\n",parm.parm.capture.timeperframe.numerator, parm.parm.capture.timeperframe.denominator);
+
+    printf("Request video buffers\n");
+    struct v4l2_requestbuffers rb;
+
+    memset(&rb, 0, sizeof rb);
+    rb.count = nbufs;
+    rb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    rb.memory = V4L2_MEMORY_MMAP;
+
+    ioctl(dev, VIDIOC_REQBUFS, &rb);
+    nbufs = rb.count;
+
+    printf("Mmap video buffers\n");
+    for (int i = 0; i < nbufs; ++i) {
+        memset(&buf0, 0, sizeof buf0);
+        buf0.index = i;
+        buf0.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf0.memory = V4L2_MEMORY_MMAP;
+        ioctl(dev, VIDIOC_QUERYBUF, &buf0);
+
+        mem0[i] = mmap(0, buf0.length, PROT_READ | PROT_WRITE, MAP_SHARED, dev, buf0.m.offset);
+    }
+    printf("Insert video buffers into queue.\n");
+    for (int i = 0; i < nbufs; ++i) {
+        memset(&buf0, 0, sizeof buf0);
+        buf0.index = i;
+        buf0.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf0.memory = V4L2_MEMORY_MMAP;
+        ioctl(dev, VIDIOC_QBUF, &buf0);
+    }
+
+    printf("Capture video stream.\n");
+    int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    ioctl(dev, VIDIOC_STREAMON, &type);
+
+    printf("Record video \n");
+    // system("rm test.H264");
+    FILE *myH264 = fopen("test.H264", "wb+");
+    if(myH264 == NULL)
+    {
+        perror("cant open 264 file\n");
+        return -1;
+    }
+    count = 0;
+    while(count ++ < 90)
+    {
+        int ret = 0;
+        memset(&buf0, 0, sizeof buf0);
+        buf0.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf0.memory = V4L2_MEMORY_MMAP;
+        do{
+            ret = ioctl(dev, VIDIOC_DQBUF, &buf0);
+            //usleep(1000*5);
+            //std::cout << "ret = " << ret <<std::endl;
+
+        }while (ret < 0);
+        if( ret < 0)
+        {
+            printf("Unable to dequeue buffer0\n");
+            fclose(myH264);
+            exit(1);
+        }
+        fwrite(mem0[buf0.index], buf0.bytesused, 1, myH264);
+        printf("Frame[%4u] inddex = %2d %u bytes %d.%06d \n", count, buf0.index, buf0.bytesused, (int)buf0.timestamp.tv_sec, (int)buf0.timestamp.tv_usec);
+        ret = ioctl(dev, VIDIOC_QBUF, &buf0);
+        if(ret <0)
+        {
+            printf("Unable to requeue buffer0\n");
+            fclose(myH264);
+            exit(2);
+        }
+    }
+    fclose(myH264);
     return 0;
 }
