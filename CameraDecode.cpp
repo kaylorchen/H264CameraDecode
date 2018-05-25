@@ -192,6 +192,20 @@ void CameraDecode::DeviceInit()
         exit(EXIT_FAILURE);
     }
 
+    struct v4l2_fmtdesc fmtdesc;
+    printf("Enumerate supporting pixel format\n");
+    memset(&fmtdesc, 0, sizeof fmtdesc);
+    fmtdesc.index = 0;
+    fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    while ((ret = ioctl(mDevice, VIDIOC_ENUM_FMT, &fmtdesc)) == 0)
+    {
+        printf("index = %d, pixelformat = %c%c%c%c, description = %s\n", fmtdesc.index,
+               fmtdesc.pixelformat & 0xFF, (fmtdesc.pixelformat >> 8) & 0xFF,
+               (fmtdesc.pixelformat >> 16) & 0xFF, (fmtdesc.pixelformat >> 24) & 0xFF,
+               fmtdesc.description);
+        fmtdesc.index++;
+    }
+
     struct v4l2_format fmt;
     printf("Configure format, width and height.\n");
     memset(&fmt, 0, sizeof fmt);

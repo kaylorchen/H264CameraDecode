@@ -8,9 +8,9 @@ int main(int argc, char *argv[])
     std::cout << "H264 Carema Test----start" << std::endl;
     CameraDecode cameraDecode;
     cameraDecode.mVideoName = "/dev/video1";
-    cameraDecode.mSaveFlag = true;
-    cameraDecode.mH264DecodeFlag = true;
-    cameraDecode.mRecordTime = 60;
+    cameraDecode.mSaveFlag = false;
+    cameraDecode.mH264DecodeFlag = false;
+    cameraDecode.mRecordTime = 3;
     cameraDecode.mFilename = "60sec.H264";
     cameraDecode.DeviceInit();
     cameraDecode.CaptureAndProcess();
